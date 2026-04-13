@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Space Evader - Vibe Coding Project</title>
+    <style>
+        body { margin: 0; background: #000; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; text-align: center; }
+        canvas { display: block; background: radial-gradient(circle, #1b2735 0%, #090a0f 100%); margin: auto; }
+        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        #status { position: absolute; top: 20px; font-size: 24px; font-weight: bold; text-shadow: 0 0 10px #00ffcc; }
+        #menu { pointer-events: all; background: rgba(0,0,0,0.85); padding: 30px; border: 2px solid #00ffcc; border-radius: 20px; box-shadow: 0 0 20px #00ffcc; max-width: 80%; }
+        button { padding: 12px 25px; cursor: pointer; font-size: 18px; margin: 10px; border: none; border-radius: 5px; background: #00ffcc; color: #000; font-weight: bold; transition: 0.3s; }
+        button:hover { background: #fff; transform: scale(1.1); }
+        #leaderboard { margin-top: 20px; text-align: left; border-top: 1px solid #444; padding-top: 10px; }
+        ul { list-style: none; padding: 0; }
+        li { padding: 5px 0; border-bottom: 1px id #222; display: flex; justify-content: space-between; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    <div id="status">Score: 0</div>
+    <div id="menu">
+        <h1 id="title">太空躲避者</h1>
+        <button onclick="toggleLang()">EN / 中文</button><br>
+        <button id="startBtn" onclick="startGame()">開始遊戲</button>
+        <div id="leaderboard">
+            <h3 id="lbTitle">排行榜 (Top 5)</h3>
+            <ul id="scoreList">讀取中...</ul>
+        </div>
+    </div>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+// 你的 Google Apps Script 網址
+const scriptURL = 'https://script.google.com/macros/s/AKfycbzU2nE-WWAM4Md77LT3bF6chrzkxLhAgmouI1vT9J8wKUQpHx1_X4C7WDejZnwOMkamsQ/exec'; 
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let score = 0, gameActive = false, lang = 'zh';
+let player = { x: 0, y: 0, size: 25 };
+let obstacles = [];
+let animationId;
+
+const text = {
+    zh: { title: "太空躲避者", start: "開始遊戲", score: "分數", lb: "排行榜 (Top 5)", loading: "讀取中...", input: "遊戲結束！\n你的分數是: " },
+    en: { title: "Space Evader", start: "Start Game", score: "Score", lb: "Leaderboard (Top 5)", loading: "Loading...", input: "Game Over!\nYour Score: " }
+};
+
+function toggleLang() {
+    lang = lang === 'zh' ? 'en' : 'zh';
+    document.getElementById('title').innerText = text[lang].title;
+    document.getElementById('startBtn').innerText = text[lang].start;
+    document.getElementById('lbTitle').innerText = text[lang].lb;
+}
+
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    player.x = canvas.width / 2;
+    player.y = canvas.height - 80;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// 控制方式：支援滑鼠與觸控
+const moveHandler = e => {
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    player.x = clientX;
+};
+window.addEventListener('mousemove', moveHandler);
+window.addEventListener('touchmove', moveHandler);
+
+function startGame() {
+    score = 0;
+    obstacles = [];
+    gameActive = true;
+    document.getElementById('menu').classList.add('hidden');
+    loop();
+}
+
+function loop() {
+    if (!gameActive) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 畫玩家 (飛船)
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = "#00ffcc";
+    ctx.fillStyle = "#00ffcc";
+    ctx.beginPath();
+    ctx.moveTo(player.x, player.y - 20);
+    ctx.lineTo(player.x - 20, player.y + 15);
+    ctx.lineTo(player.x + 20, player.y + 15);
+    ctx.closePath();
+    ctx.fill();
+
+    // 障礙物產生與移動
+    if (Math.random() < 0.04) {
+        obstacles.push({ x: Math.random() * canvas.width, y: -50, size: 20 + Math.random() * 40, speed: 3 + Math.random() * 5 });
+    }
+    
+    ctx.shadowBlur = 0;
+    obstacles.forEach((obs, i) => {
+        obs.y += obs.speed + (score / 1000);
+        ctx.fillStyle = "#ff4444";
+        ctx.font = `${obs.size}px serif`;
+        ctx.fillText("☄️", obs.x - obs.size/2, obs.y);
+
+        // 碰撞檢測 (簡單圓形碰撞)
+        let dx = player.x - obs.x;
+        let dy = player.y - obs.y;
+        let distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance < (player.size + obs.size/2)) {
+            gameOver();
+        }
+    });
+
+    // 清除出界障礙物
+    obstacles = obstacles.filter(obs => obs.y < canvas.height + 50);
+
+    score++;
+    document.getElementById('status').innerText = `${text[lang].score}: ${score}`;
+    animationId = requestAnimationFrame(loop);
+}
+
+function gameOver() {
+    gameActive = false;
+    cancelAnimationFrame(animationId);
+    let name = prompt(`${text[lang].input}${score}\n請輸入你的暱稱 (Please enter your name):`) || "Anonymous";
+    
+    // 傳送分數到 Google Sheets
+    fetch(scriptURL, {
+        method: 'POST',
+        mode: 'no-cors', // 解決跨域問題
+        body: JSON.stringify({ name: name, score: score })
+    }).then(() => {
+        setTimeout(loadScores, 1000); // 延遲一秒讀取確保資料已寫入
+    });
+
+    document.getElementById('menu').classList.remove('hidden');
+}
+
+function loadScores() {
+    document.getElementById('scoreList').innerText = text[lang].loading;
+    fetch(scriptURL)
+    .then(res => res.json())
+    .then(data => {
+        const list = document.getElementById('scoreList');
+        list.innerHTML = data.map(i => `<li><span>${i[0]}</span><span>${i[1]}</span></li>`).join('');
+    })
+    .catch(() => {
+        document.getElementById('scoreList').innerText = "無法載入排行";
+    });
+}
+
+loadScores(); 
+</script>
+</body>
+</html>
